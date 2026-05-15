@@ -1,53 +1,56 @@
+```
+# Dependencies
 node_modules/
+target/
+
+# Build artifacts
 dist/
-coverage/
-.stryker-tmp/
+build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.python-version
+
+# Logs
+*.log
+
+# Environment variables
 .env
 .env.local
-*.log
+*.env.*
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+Cargo.lock
+
+# TypeScript/JavaScript
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.tsbuildinfo
-transcripts/
-sessions/
-*.jsonl
-!tests/**/*.jsonl
-# Committed reference transcripts so readers can reasonix replay / diff
-# the v0.1 bench results without an API key.
-!benchmarks/tau-bench/transcripts/
-!benchmarks/tau-bench/transcripts/*.jsonl
-.turbo/
-# Local-only Claude Code settings — personal overrides, never committed.
-.claude/settings.local.json
-# Per-user Reasonix state under .reasonix/ — committable team-level
-# files (settings.json, skills/) stay tracked, but the user-private
-# bits (semantic index, sessions, opt-out markers) never should.
-.reasonix/semantic/
-.reasonix/sessions/
-.reasonix/semantic-skip
-# Scratch entry regenerated each time scripts/bundle-codemirror.mjs runs.
-scripts/.cm-entry.mjs
-# Personal bun lockfile — project uses npm officially.
-bun.lock
 
-# Local portable Node/npm used for development on machines without npm.
-.tools/
-.npm-cache/
-
-# Tauri desktop shell build artifacts.
-desktop/src-tauri/target/
-desktop/src-tauri/gen/
-desktop/src-tauri/binaries/
-
-# Cargo build artifacts for the workspace at the repo root.
-/target/
-
-# Design mock-up reference (local, not part of repo)
-.design-ref/
-*.cpuprofile
+# Temporary files
+*.tmp
+*.temp
+```
