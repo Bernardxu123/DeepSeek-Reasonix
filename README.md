@@ -15,7 +15,7 @@
   &nbsp;·&nbsp;
   <a href="./benchmarks/">Benchmarks</a>
   &nbsp;·&nbsp;
-  <a href="https://discord.gg/XF78rEME2D">Discord</a>
+  <strong><a href="https://discord.gg/XF78rEME2D">Discord</a></strong>
 </p>
 
 <p align="center">
@@ -54,6 +54,9 @@
 
 > [!NOTE]
 > **Real user, single day (2026-05-01):** 435M input tokens, **99.82% cache hit**, ~$12 instead of the ~$61 the same workload would cost with no cache on `v4-flash` — see the [case study](./benchmarks/real-world-cache/README.md). DeepSeek provides the cacheable bytes; the four mechanisms in [Pillar 1](./docs/ARCHITECTURE.md#pillar-1--cache-first-loop) are how Reasonix keeps them cacheable across long sessions.
+
+> [!IMPORTANT]
+> **Community · 加入社区** — bilingual Discord with channels for setup help (`#help` / `#求助`), workflow showcases, feature ideas, and contributor-only PR coordination. Verify your GitHub in-server to get the **Contributor** role automatically. → **<https://discord.gg/XF78rEME2D>**
 
 <br/>
 

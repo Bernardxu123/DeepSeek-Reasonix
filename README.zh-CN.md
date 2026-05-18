@@ -15,7 +15,7 @@
   &nbsp;·&nbsp;
   <a href="./benchmarks/">基准测试</a>
   &nbsp;·&nbsp;
-  <a href="https://discord.gg/XF78rEME2D">Discord</a>
+  <strong><a href="https://discord.gg/XF78rEME2D">Discord</a></strong>
 </p>
 
 <p align="center">
@@ -51,6 +51,9 @@
 
 > [!TIP]
 > **缓存稳定不是开关，而是循环要围绕设计的不变量。** 这就是 Reasonix 只支持 DeepSeek 的根本原因 —— 每一层都为 DeepSeek 字节稳定的前缀缓存机制调过。
+
+> [!IMPORTANT]
+> **加入社区 · Community** — 中英双语 Discord，频道包括 `#求助` / `#help`、`#分享` / `#showcase`、`#想法反馈`、贡献者专属 PR 协调区。在群内绑定 GitHub 后自动识别贡献者身份。→ **<https://discord.gg/XF78rEME2D>**
 
 <br/>
 
