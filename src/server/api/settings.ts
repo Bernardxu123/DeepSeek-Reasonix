@@ -1,6 +1,7 @@
 /** apiKey is write-only on the wire; GET always returns a redacted form so dashboard screenshots don't leak credentials. */
 
 import {
+  type EditMode,
   isPlausibleKey,
   normalizeSkillPathEntries,
   normalizeSkillPaths,
@@ -19,6 +20,7 @@ interface SettingsBody {
   baseUrl?: unknown;
   lang?: unknown;
   preset?: unknown;
+  editMode?: unknown;
   reasoningEffort?: unknown;
   search?: unknown;
   model?: unknown;
@@ -42,6 +44,7 @@ function parseBody(raw: string): SettingsBody {
 // read time. Web sends new names in 0.12.x onward.
 const VALID_PRESETS = new Set(["auto", "flash", "pro", "fast", "smart", "max"]);
 const VALID_EFFORTS = new Set(["high", "max"]);
+const VALID_EDIT_MODES = new Set(["review", "auto", "yolo"]);
 
 export async function handleSettings(
   method: string,
@@ -66,7 +69,7 @@ export async function handleSettings(
         preset: cfg.preset ?? "auto",
         reasoningEffort: cfg.reasoningEffort ?? "max",
         search: cfg.search !== false,
-        editMode: cfg.editMode ?? "review",
+        editMode: ctx.getEditMode?.() ?? cfg.editMode ?? "review",
         session: cfg.session ?? null,
         model: live?.model ?? null,
         proNext: live?.proArmed ?? false,
@@ -140,6 +143,13 @@ export async function handleSettings(
       cfg.preset = fields.preset as "auto" | "flash" | "pro" | "fast" | "smart" | "max";
       presetPendingLive = fields.preset;
       changed.push("preset");
+    }
+    if (fields.editMode !== undefined) {
+      if (typeof fields.editMode !== "string" || !VALID_EDIT_MODES.has(fields.editMode)) {
+        return { status: 400, body: { error: "editMode must be review | auto | yolo" } };
+      }
+      cfg.editMode = fields.editMode as EditMode;
+      changed.push("editMode");
     }
     if (fields.reasoningEffort !== undefined) {
       if (
@@ -220,6 +230,11 @@ export async function handleSettings(
       // value still reflects the old setting (and vice-versa for
       // preset / reasoningEffort).
       if (langPending) setLanguage(langPending);
+      if (fields.editMode !== undefined) {
+        const mode = fields.editMode as EditMode;
+        if (ctx.setEditMode) ctx.setEditMode(mode);
+        else saveEditMode(mode, ctx.configPath);
+      }
       if (presetPendingLive) ctx.applyPresetLive?.(presetPendingLive);
       if (effortPendingLive) ctx.applyEffortLive?.(effortPendingLive);
       if (modelPendingLive) ctx.applyModelLive?.(modelPendingLive);
