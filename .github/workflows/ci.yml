@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install dashboard dependencies
+        run: npm --prefix dashboard ci || npm --prefix dashboard install
+
       - name: Lint (biome)
         run: npm run lint
 
