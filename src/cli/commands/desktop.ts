@@ -39,7 +39,6 @@ import {
   loadModel,
   loadOllamaApiKey,
   loadPerplexityApiKey,
-  loadPromptHistory,
   loadQQConfig,
   loadReasoningEffort,
   loadRecentWorkspaces,
@@ -59,7 +58,6 @@ import {
   saveEditMode,
   saveEditor,
   saveModel,
-  savePromptHistory,
   saveReasoningEffort,
   saveShowSystemEvents,
   saveSubagentModels,
@@ -115,12 +113,14 @@ import {
 } from "../../index.js";
 import { type McpServerSpec, parseMcpSpec, specToRaw } from "../../mcp/spec.js";
 import {
+  type PromptHistoryCursor,
   deleteSession,
   listSessionsForWorkspace,
   loadSessionMessages,
   loadSessionMeta,
   patchSessionMeta,
   patchSessionWorkspaceIfMissing,
+  promptHistoryStep,
   sessionPath,
   timestampSuffix,
 } from "../../memory/session.js";
@@ -202,7 +202,6 @@ type InMessage = { tabId?: string } & (
       subagentModels?: Record<string, "flash" | "pro">;
       contextTokens?: Record<string, number>;
       showSystemEvents?: boolean;
-      promptHistory?: string[];
     }
   | { cmd: "qq_status_get" }
   | { cmd: "qq_connect" }
@@ -216,6 +215,14 @@ type InMessage = { tabId?: string } & (
   | { cmd: "mention_query"; query: string; nonce: number }
   | { cmd: "mention_preview"; path: string; nonce: number }
   | { cmd: "mention_picked"; path: string }
+  | {
+      cmd: "prompt_history_step";
+      nonce: number;
+      direction: "older" | "newer";
+      cursor?: PromptHistoryCursor | null;
+      startSessionName?: string;
+      stopSessionName?: string;
+    }
   | { cmd: "tab_open"; workspaceDir?: string }
   | { cmd: "tab_close" }
   | { cmd: "tab_activate"; tabId: string }
@@ -277,7 +284,6 @@ interface SettingsEvent {
   subagentModels?: Record<string, "flash" | "pro">;
   contextTokens?: Record<string, number>;
   showSystemEvents?: boolean;
-  promptHistory?: string[];
   version: string;
 }
 
@@ -353,6 +359,15 @@ interface MentionPreviewEvent {
   path: string;
   head: string;
   totalLines: number;
+}
+
+interface PromptHistoryResultEvent {
+  type: "$prompt_history_result";
+  nonce: number;
+  entry: {
+    value: string;
+    cursor: PromptHistoryCursor;
+  } | null;
 }
 
 interface TabOpenedEvent {
@@ -606,6 +621,7 @@ type EmittableEvent =
   | BalanceEvent
   | MentionResultsEvent
   | MentionPreviewEvent
+  | PromptHistoryResultEvent
   | RetryResultEvent
   | BtwResultEvent
   | TabOpenedEvent
@@ -1016,7 +1032,6 @@ function emitSettings(tab: Tab): void {
       subagentModels: loadSubagentModels(),
       contextTokens: readConfig().contextTokens,
       showSystemEvents: loadShowSystemEvents(),
-      promptHistory: loadPromptHistory(),
       version: VERSION,
     },
     tab.id,
@@ -3272,15 +3287,6 @@ export async function desktopCommand(opts: DesktopOptions): Promise<void> {
           }
           writeConfig(cfg);
         }
-        if (msg.promptHistory !== undefined && msg.promptHistory.length > 0) {
-          // Frontend sends [newEntry]; merge against the current persisted list
-          // here (on the backend) so concurrent tabs never clobber each other.
-          const existing = loadPromptHistory();
-          const entry = msg.promptHistory[0]!;
-          const merged = [entry, ...existing.filter((e) => e !== entry)].slice(0, 100);
-          savePromptHistory(merged);
-          emitSettings(tab);
-        }
         if (msg.subagentModels !== undefined) {
           saveSubagentModels(msg.subagentModels);
           emitSkills(tab);
@@ -3403,6 +3409,24 @@ export async function desktopCommand(opts: DesktopOptions): Promise<void> {
           tab.id,
         );
         emitQQSettings(tab);
+      }
+      return;
+    }
+    if (msg.cmd === "prompt_history_step") {
+      try {
+        const entry = promptHistoryStep({
+          direction: msg.direction,
+          cursor: msg.cursor ?? null,
+          startSessionName: msg.startSessionName,
+          stopSessionName: msg.stopSessionName,
+          workspace: tab.rootDir,
+        });
+        emit({ type: "$prompt_history_result", nonce: msg.nonce, entry }, tab.id);
+      } catch (err) {
+        emit(
+          { type: "$error", message: `prompt_history_step failed: ${(err as Error).message}` },
+          tab.id,
+        );
       }
       return;
     }

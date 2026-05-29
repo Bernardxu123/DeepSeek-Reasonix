@@ -149,6 +149,20 @@ export type MentionPreviewEvent = {
   totalLines: number;
 };
 
+export type PromptHistoryCursor = {
+  sessionName: string;
+  messageIndex: number;
+};
+
+export type PromptHistoryResultEvent = {
+  type: "$prompt_history_result";
+  nonce: number;
+  entry: {
+    value: string;
+    cursor: PromptHistoryCursor;
+  } | null;
+};
+
 export type TabOpenedEvent = {
   type: "$tab_opened";
   workspaceDir: string;
@@ -355,8 +369,6 @@ export type SettingsEvent = {
   };
   subagentModels?: Record<string, "flash" | "pro">;
   showSystemEvents?: boolean;
-  /** Desktop prompt-history entries seeded on tab load, most-recent-first (#2051). */
-  promptHistory?: string[];
   version: string;
 };
 
@@ -411,8 +423,6 @@ export type SettingsPatch = {
   /** Per-model context-window override (tokens). Keys are model ids; values are the prompt-side token cap. */
   contextTokens?: Record<string, number>;
   showSystemEvents?: boolean;
-  /** Persisted prompt-history entries to update on each send (#2051). */
-  promptHistory?: string[];
 };
 
 export type QQConfigPatch = {
@@ -545,6 +555,7 @@ export type IncomingEvent = { tabId?: string } & (
   | PlanClearedEvent
   | MentionResultsEvent
   | MentionPreviewEvent
+  | PromptHistoryResultEvent
   | TabOpenedEvent
   | TabClosedEvent
   | McpSpecsEvent
@@ -594,6 +605,14 @@ export type OutgoingCommand = { tabId?: string } & (
   | { cmd: "mention_query"; query: string; nonce: number }
   | { cmd: "mention_preview"; path: string; nonce: number }
   | { cmd: "mention_picked"; path: string }
+  | {
+      cmd: "prompt_history_step";
+      nonce: number;
+      direction: "older" | "newer";
+      cursor?: PromptHistoryCursor | null;
+      startSessionName?: string;
+      stopSessionName?: string;
+    }
   | { cmd: "tab_open"; workspaceDir?: string }
   | { cmd: "tab_close" }
   | { cmd: "tab_activate"; tabId: string }

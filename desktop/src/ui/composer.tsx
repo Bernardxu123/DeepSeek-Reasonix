@@ -198,6 +198,9 @@ function guessImageExtension(mime: string): string {
 export function Composer({
   draft,
   setDraft,
+  onDraftUserEdit,
+  promptHistoryBrowsing,
+  onPromptHistoryNavigate,
   onSend,
   onAbort,
   disabled,
@@ -220,11 +223,12 @@ export function Composer({
   queuedSends,
   onQueueWhileBusy,
   onDequeueSend,
-  initialHistory,
-  onHistoryPush,
 }: {
   draft: string;
   setDraft: React.Dispatch<React.SetStateAction<string>>;
+  onDraftUserEdit?: () => void;
+  promptHistoryBrowsing?: boolean;
+  onPromptHistoryNavigate?: (direction: "older" | "newer") => boolean | void;
   onSend: () => void;
   onAbort: () => void;
   disabled?: boolean;
@@ -250,10 +254,6 @@ export function Composer({
   /** Called when the user presses Enter while busy with a non-empty draft. Owns clearing the draft. */
   onQueueWhileBusy?: (text: string) => void;
   onDequeueSend?: (index: number) => void;
-  /** Seed the in-session history from persisted storage so ArrowUp works after restart (#2051). */
-  initialHistory?: string[];
-  /** Called whenever an entry is pushed so the caller can persist the updated list. */
-  onHistoryPush?: (entry: string, history: string[]) => void;
 }) {
   const [popup, setPopup] = useState<Popup>(null);
   const [pickedChips, setPickedChips] = useState<Map<string, Chip["kind"]>>(new Map());
@@ -277,22 +277,8 @@ export function Composer({
   // macOS Chinese IME fires compositionend BEFORE the confirm keydown.
   const composingRef = useRef(false);
   const compositionEndedAtRef = useRef(0);
-  // Persisted history is stored most-recent-first; historyRef uses oldest-first
-  // (entries are appended via push, ArrowUp reads from the end). Reverse on load.
-  const historyRef = useRef<string[]>(initialHistory ? [...initialHistory].reverse() : []);
-  const [browseIdx, setBrowseIdx] = useState(-1);
-  const savedDraftRef = useRef("");
   const activeRangeRef = useRef<ActiveRange | null>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
-
-  // `initialHistory` arrives asynchronously (settings load after mount).
-  // Sync historyRef when it first becomes available and the user hasn't
-  // started navigating yet, so ArrowUp works from the first keystroke (#2051).
-  useEffect(() => {
-    if (initialHistory && initialHistory.length > 0 && browseIdx === -1) {
-      historyRef.current = [...initialHistory].reverse();
-    }
-  }, [initialHistory, browseIdx]);
 
   const insertMention = (picked: string) => {
     const rel =
@@ -464,6 +450,7 @@ export function Composer({
 
   const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const v = e.target.value;
+    onDraftUserEdit?.();
     setDraft(v);
     const cursorPos = e.target.selectionStart ?? v.length;
     syncPopupFromCursor(v, cursorPos);
@@ -528,34 +515,20 @@ export function Composer({
     textareaRef.current?.focus();
   };
 
-  const recordSendAndReset = () => {
-    const trimmed = draft.trim();
-    historyRef.current.push(trimmed);
-    if (historyRef.current.length > 100) historyRef.current.shift();
-    setBrowseIdx(-1);
-    onHistoryPush?.(trimmed, [...historyRef.current]);
-  };
-
-  const navigateHistory = (dir: -1 | 1) => {
-    const hist = historyRef.current;
-    if (hist.length === 0) return;
-    if (dir === -1) {
-      const nextIdx = browseIdx + 1;
-      if (nextIdx < hist.length) {
-        if (browseIdx === -1) savedDraftRef.current = draft;
-        setBrowseIdx(nextIdx);
-        setDraft(hist[hist.length - 1 - nextIdx]);
-      }
-    } else {
-      if (browseIdx > 0) {
-        const nextIdx = browseIdx - 1;
-        setBrowseIdx(nextIdx);
-        setDraft(hist[hist.length - 1 - nextIdx]);
-      } else if (browseIdx === 0) {
-        setBrowseIdx(-1);
-        setDraft(savedDraftRef.current);
-      }
-    }
+  const shouldNavigatePromptHistory = (
+    e: KeyboardEvent<HTMLTextAreaElement>,
+    direction: "older" | "newer",
+  ) => {
+    if (!onPromptHistoryNavigate) return false;
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+    const native = e.nativeEvent as globalThis.KeyboardEvent;
+    if (native.isComposing) return false;
+    const ta = textareaRef.current;
+    if (!ta || ta.selectionStart !== ta.selectionEnd) return false;
+    const atStart = ta.selectionStart === 0;
+    const atEnd = ta.selectionStart === draft.length;
+    if (promptHistoryBrowsing) return atStart || atEnd;
+    return direction === "older" && atStart;
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -627,16 +600,15 @@ export function Composer({
       }
     }
     if (!popup) {
-      const ta = textareaRef.current;
-      if (e.key === "ArrowUp" && ta && ta.selectionStart === 0) {
-        e.preventDefault();
-        navigateHistory(-1);
-        return;
-      }
-      if (e.key === "ArrowDown" && ta && ta.selectionStart === draft.length) {
-        e.preventDefault();
-        navigateHistory(1);
-        return;
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        const direction = e.key === "ArrowUp" ? "older" : "newer";
+        if (shouldNavigatePromptHistory(e, direction)) {
+          const handled = onPromptHistoryNavigate?.(direction);
+          if (handled !== false) {
+            e.preventDefault();
+            return;
+          }
+        }
       }
     }
     if (composingRef.current || e.nativeEvent.isComposing || Date.now() - compositionEndedAtRef.current < 50) return;
@@ -649,7 +621,6 @@ export function Composer({
           setPickedChips(new Map());
         }
       } else if (!disabled && draft.trim()) {
-        recordSendAndReset();
         onSend();
         setPickedChips(new Map());
       }
@@ -843,7 +814,6 @@ export function Composer({
                 disabled={disabled || !draft.trim()}
                 onClick={() => {
                   if (!disabled && draft.trim()) {
-                    recordSendAndReset();
                     onSend();
                     setPickedChips(new Map());
                   }
