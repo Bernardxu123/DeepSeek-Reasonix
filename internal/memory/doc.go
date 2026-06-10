@@ -18,6 +18,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"reasonix/internal/pathutil"
 	"strings"
 )
 
@@ -261,12 +263,10 @@ func resolvePath(p, baseDir string) string {
 }
 
 // absOf returns the absolute form of p, falling back to a cleaned p on error so
-// the value is still usable as a stable map key.
+// the value is still usable as a stable map key. On Windows, this normalizes
+// MSYS-style paths (e.g. /c/Users/...) to proper Windows paths (C:\Users\...).
 func absOf(p string) string {
-	if abs, err := filepath.Abs(p); err == nil {
-		return abs
-	}
-	return filepath.Clean(p)
+	return pathutil.Abs(p)
 }
 
 // sameDir reports whether two paths denote the same directory.

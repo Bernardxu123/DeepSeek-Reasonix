@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"reasonix/internal/frontmatter"
+	"reasonix/internal/pathutil"
 )
 
 // Store is the per-project auto-memory: a directory of one-fact-per-file
@@ -62,6 +63,9 @@ func StoreFor(userDir, cwd string) Store {
 	if userDir == "" {
 		return Store{}
 	}
+	// Normalize userDir to proper Windows paths if running on Windows,
+	// so MSYS-style paths like /c/Users/... become C:\Users\...
+	userDir = pathutil.Abs(userDir)
 	return Store{Dir: filepath.Join(userDir, "projects", slugify(absOf(cwd)), "memory")}
 }
 

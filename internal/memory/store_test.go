@@ -198,3 +198,63 @@ func TestDisabledStoreIsNoOp(t *testing.T) {
 		t.Fatal("disabled store Save should error, not silently drop")
 	}
 }
+
+// TestStoreForWindowsPaths verifies that StoreFor correctly handles Windows
+// paths, including MSYS-style paths that Git Bash may provide.
+func TestStoreForWindowsPaths(t *testing.T) {
+	tests := []struct {
+		name    string
+		userDir string
+		cwd     string
+		want    string // expected substring in the Dir
+	}{
+		{
+			name:    "standard unix path",
+			userDir: "/home/me/.config/reasonix",
+			cwd:     "/Users/me/proj",
+			want:    "-Users-me-proj",
+		},
+		{
+			name:    "empty userDir disables store",
+			userDir: "",
+			cwd:     "/any/path",
+			want:    "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := StoreFor(tt.userDir, tt.cwd)
+			if tt.want == "" {
+				if s.Dir != "" {
+					t.Fatalf("expected empty Dir for disabled store, got %q", s.Dir)
+				}
+				return
+			}
+			if !strings.Contains(s.Dir, tt.want) {
+				t.Fatalf("expected Dir to contain %q, got %q", tt.want, s.Dir)
+			}
+		})
+	}
+}
+
+// TestSlugifyWindowsPaths ensures slugify produces filesystem-safe segments
+// from Windows paths, including those with drive letters.
+func TestSlugifyWindowsPaths(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"unix path", "/Users/me/proj", "-Users-me-proj"},
+		{"windows drive only", "D:\\", "D--"},
+		{"msys style", "/c/Users/test", "-c-Users-test"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := slugify(tt.in)
+			if got != tt.want {
+				t.Errorf("slugify(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
