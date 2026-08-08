@@ -1309,7 +1309,7 @@ export interface MemoryView {
 }
 
 // SettingsTab is the top-level navigation item in the Settings Centre modal.
-export type SettingsTab = "general" | "models" | "providers" | "bots" | "mcp" | "remote" | "skills" | "subagents" | "plugins" | "memory" | "hooks" | "diagnostics" | "shortcuts" | "permissions" | "sandbox" | "network" | "appearance" | "updates";
+export type SettingsTab = "general" | "models" | "providers" | "bots" | "mcp" | "remote" | "skills" | "subagents" | "plugins" | "memory" | "hooks" | "diagnostics" | "shortcuts" | "permissions" | "sandbox" | "network" | "appearance" | "storage" | "updates";
 
 // ── Remote SSH module (mirrors desktop/remote_app.go view structs) ──
 
@@ -1464,6 +1464,20 @@ export interface RemoteLegacyWorkbenchData {
 export interface RemoteForwardsEvent {
   hostId: string;
   forwards: RemoteForwardView[];
+}
+
+/** Extension runtime doctor report from App.RuntimeDoctor. */
+export interface RuntimeDoctorReport {
+  text: string;
+  publishedGeneration: number;
+  allowResume: boolean;
+  cleanRollback: boolean;
+  hasIrreversible: boolean;
+  noOpRebuilds: number;
+  fullRebuilds: number;
+  subgraphRebuilds: number;
+  staleDrops: number;
+  admissionRejected: number; runtimeOwnerFallbacks: number;
 }
 
 /** Capability diagnostics report from App.CapabilityDiagnostics (capdiag.Report). */

@@ -74,6 +74,11 @@ func (t *goalUsageTee) RecordReadinessAudit(a evidence.ReadinessAudit) {
 	}
 }
 
+// RecordOutcomeProgress forwards the shadow outcome sample unchanged.
+func (t *goalUsageTee) RecordOutcomeProgress(sample evidence.OutcomeSample) {
+	event.RecordOutcomeProgress(t.inner, sample)
+}
+
 // RecordContractShadow forwards the shadow contract audit unchanged.
 func (t *goalUsageTee) RecordContractShadow(a event.ContractShadowAudit) {
 	if t == nil || t.inner == nil {

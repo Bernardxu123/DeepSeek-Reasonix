@@ -131,6 +131,14 @@ func (s *sink) RecordReadinessAudit(a evidence.ReadinessAudit) {
 	event.RecordReadinessAudit(s.inner, a)
 }
 
+func (s *sink) RecordContractShadow(a event.ContractShadowAudit) {
+	event.RecordContractShadow(s.inner, a)
+}
+
+func (s *sink) RecordOutcomeProgress(sample evidence.OutcomeSample) {
+	event.RecordOutcomeProgress(s.inner, sample)
+}
+
 func (s *sink) RecordProtocolRecovery(a event.ProtocolRecoveryAudit) {
 	add(s.counts, "tool_call_reasoning_recovery", string(a.Kind), 1)
 	event.RecordProtocolRecovery(s.inner, a)

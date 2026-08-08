@@ -19,9 +19,8 @@ import (
 // SchemaVersion identifies the record layout; bump on breaking changes.
 const SchemaVersion = 1
 
-// Record is one observed occurrence. Exactly one of Event, ReadinessAudit,
-// ProtocolRecovery, or TurnCompletion is set; Seq orders them and TS is the
-// unix-millisecond observation time at the recorder.
+// Record is one observed occurrence. Exactly one payload field is set; Seq
+// orders them and TS is the unix-millisecond observation time at the recorder.
 type Record struct {
 	SchemaVersion    int                  `json:"schema_version"`
 	Seq              uint64               `json:"seq"`
@@ -31,6 +30,18 @@ type Record struct {
 	ProtocolRecovery string               `json:"protocol_recovery,omitempty"`
 	TurnCompletion   bool                 `json:"turn_completion,omitempty"`
 	ContractShadow   *ContractShadowAudit `json:"contract_shadow,omitempty"`
+	OutcomeProgress  *OutcomeProgress     `json:"outcome_progress,omitempty"`
+}
+
+// OutcomeProgress mirrors evidence.OutcomeSample with stable snake_case keys.
+type OutcomeProgress struct {
+	Round        int `json:"round"`
+	Exploration  int `json:"exploration,omitempty"`
+	Verification int `json:"verification,omitempty"`
+	Objective    int `json:"objective,omitempty"`
+	Regression   int `json:"regression,omitempty"`
+	Churn        int `json:"churn,omitempty"`
+	LegacyGain   int `json:"legacy_gain,omitempty"`
 }
 
 // ContractShadowAudit mirrors event.ContractShadowAudit with stable keys.
@@ -150,6 +161,19 @@ func (r *Recorder) RecordContractShadow(a event.ContractShadowAudit) {
 		ReadyToFinalize:       a.ReadyToFinalize,
 	}})
 	event.RecordContractShadow(r.inner, a)
+}
+
+func (r *Recorder) RecordOutcomeProgress(sample evidence.OutcomeSample) {
+	r.append(Record{OutcomeProgress: &OutcomeProgress{
+		Round:        sample.Round,
+		Exploration:  sample.Exploration,
+		Verification: sample.Verification,
+		Objective:    sample.Objective,
+		Regression:   sample.Regression,
+		Churn:        sample.Churn,
+		LegacyGain:   sample.LegacyGain,
+	}})
+	event.RecordOutcomeProgress(r.inner, sample)
 }
 
 func (r *Recorder) RecordProtocolRecovery(a event.ProtocolRecoveryAudit) {

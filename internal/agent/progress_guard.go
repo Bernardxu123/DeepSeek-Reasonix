@@ -49,16 +49,32 @@ func (g *progressGuard) observe(receipts []Receipt) int {
 type Receipt = evidence.Receipt
 
 // applyBatchGuards runs both post-batch guards: the storm breaker (failure
-// fixation) and the progress guard (zero-gain repetition).
+// fixation) and the progress guard (zero-gain repetition). The outcome shadow
+// observes the same receipts afterwards without influencing either guard.
 func (a *Agent) applyBatchGuards(calls []provider.ToolCall, outcomes []toolOutcome, results []string, receiptMark int) {
 	a.applyStormBreaker(calls, outcomes, results, receiptMark)
 	a.applyProgressGuard(results, outcomes, receiptMark)
+	a.observeOutcomeShadow(receiptMark)
 }
 
-// resetTurnEvidence clears the ledger and the progress-guard state together.
+// resetTurnEvidence clears the ledger and both progress scorers together.
 func (a *Agent) resetTurnEvidence() {
 	a.evidence.Reset()
 	a.progress.reset()
+	a.outcome = evidence.NewOutcomeTracker()
+}
+
+// observeOutcomeShadow scores the round's receipts through the shadow outcome
+// tracker and records the sample for trajectory analysis. Unlike the guards it
+// observes every round, including all-failure ones — regressions live there.
+func (a *Agent) observeOutcomeShadow(receiptMark int) {
+	if a.evidence == nil {
+		return
+	}
+	if a.outcome == nil {
+		a.outcome = evidence.NewOutcomeTracker()
+	}
+	event.RecordOutcomeProgress(a.sink, a.outcome.ScoreRound(a.evidence.ReceiptsSince(receiptMark)))
 }
 
 // applyProgressGuard escalates when consecutive rounds stop producing new

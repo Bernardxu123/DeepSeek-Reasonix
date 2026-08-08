@@ -84,6 +84,10 @@ type trajScan struct {
 	seen                               map[string]bool // (name, args) pairs already dispatched
 	gapPlanner, gapCompact, gapHandoff bool
 	sawCallIDs                         bool
+
+	outcomePoints          []outcomePoint
+	verifySeen, verifyPass map[string]bool
+	verifyPoints           []verifyPoint
 }
 
 // modelAttempt is one sampling attempt's wall interval; planner marks attempts

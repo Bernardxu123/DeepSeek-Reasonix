@@ -166,3 +166,10 @@ func (c *coalescer) RecordContractShadow(a ContractShadowAudit) {
 	c.drainAndUnlock()
 	RecordContractShadow(c.inner, a)
 }
+
+func (c *coalescer) RecordOutcomeProgress(sample evidence.OutcomeSample) {
+	c.mu.Lock()
+	c.enqueueFlushLocked()
+	c.drainAndUnlock()
+	RecordOutcomeProgress(c.inner, sample)
+}

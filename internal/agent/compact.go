@@ -644,6 +644,7 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 			a.sink.Emit(event.Event{Kind: event.Usage, ModelRef: a.modelRef, Usage: usage, Pricing: a.pricing, UsageSource: event.UsageSourceCompaction})
 		}
 	}()
+	defer trackPublishedHostStream(ctx, cancel)()
 	ch, err := a.prov.Stream(ctx, provider.Request{
 		Messages: []provider.Message{
 			{Role: provider.RoleSystem, Content: sys},
@@ -655,6 +656,7 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 		return "", usage, err
 	}
 
+	// Unblock on timeout if the stream stalls while open.
 	var b strings.Builder
 	for {
 		select {

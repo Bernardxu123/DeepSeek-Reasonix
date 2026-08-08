@@ -104,6 +104,10 @@ type trajectorySummary struct {
 	ShadowIntent   string `json:"shadow_intent,omitempty"`
 	ShadowVerdict  string `json:"shadow_verdict,omitempty"`
 	ShadowComplete bool   `json:"shadow_complete,omitempty"`
+
+	// Outcome shadow: the runtime outcome scorer's per-round series condensed,
+	// or a verification-receipt backfill for recordings that predate it.
+	Outcome *outcomeSummary `json:"outcome,omitempty"`
 }
 
 // toolWall is the best available tool wall-clock: interval union when the
@@ -124,6 +128,14 @@ type trajectoryRecord struct {
 		Verdict  string `json:"verdict"`
 		Complete bool   `json:"complete"`
 	} `json:"contract_shadow"`
+	OutcomeProgress *struct {
+		Exploration  int `json:"exploration"`
+		Verification int `json:"verification"`
+		Objective    int `json:"objective"`
+		Regression   int `json:"regression"`
+		Churn        int `json:"churn"`
+		LegacyGain   int `json:"legacy_gain"`
+	} `json:"outcome_progress"`
 	Event *struct {
 		Kind          string `json:"kind"`
 		Code          string `json:"code"`
@@ -297,6 +309,13 @@ func (t *trajScan) record(rec trajectoryRecord) {
 		t.s.ShadowIntent = cs.Intent
 		t.s.ShadowVerdict = cs.Verdict
 		t.s.ShadowComplete = cs.Complete
+	}
+	if op := rec.OutcomeProgress; op != nil {
+		t.outcomePoints = append(t.outcomePoints, outcomePoint{
+			ts: rec.TS, exploration: op.Exploration, verification: op.Verification,
+			objective: op.Objective, regression: op.Regression, churn: op.Churn,
+			legacyGain: op.LegacyGain,
+		})
 	}
 	if rec.Event == nil {
 		return
@@ -502,6 +521,9 @@ func (t *trajScan) recordResult(rec trajectoryRecord) {
 			info.verification = tl.Execution.Verification
 		}
 	}
+	if ex := tl.Execution; ex != nil && (ex.Verification == "passed" || ex.Verification == "failed") {
+		t.observeVerification(tl.Name+"\x00"+tl.Args, ex.Verification == "passed", rec.TS)
+	}
 	t.batch.serialMs += tl.DurationMs
 	if tl.StartedAt > 0 && tl.EndedAt >= tl.StartedAt {
 		t.batch.intervals = append(t.batch.intervals, [2]int64{tl.StartedAt, tl.EndedAt})
@@ -588,6 +610,7 @@ func (t *trajScan) finish() *trajectorySummary {
 	if s.ModelMs = s.SpanMs - s.toolWall(); s.ModelMs < 0 {
 		s.ModelMs = 0
 	}
+	s.Outcome = t.summarizeOutcome()
 	t.decompose()
 	return s
 }

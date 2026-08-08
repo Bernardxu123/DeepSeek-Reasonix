@@ -22,6 +22,7 @@ import { appendTurnActionCopyText } from "../lib/turnActionCopy";
 import { displayReasoningText, STREAMING_REASONING_WINDOW_STEP_CHARS, STREAMING_REASONING_WINDOW_STEP_LINES } from "../lib/reasoningDisplay";
 import { observeScrollContentSize } from "../lib/scrollContentObserver";
 import { Markdown } from "./Markdown";
+import { ReasoningSummary } from "./ReasoningSummary";
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
 type AssistantItem = Extract<Item, { kind: "assistant" }>;
@@ -35,7 +36,7 @@ type AssistantReasoningDisplay = "normal" | "hide";
 const LiveAssistantMessage = memo(function LiveAssistantMessage({
   item,
   defaultExpanded = false,
-  expandWhileStreaming = true,
+  expandWhileStreaming = false,
   truncateStreamingReasoning = false,
   creationMode = false,
   reasoningDisplay = "normal",
@@ -85,22 +86,17 @@ const LiveAssistantMessage = memo(function LiveAssistantMessage({
 function InlineAssistantReasoning({ item, active }: { item: AssistantItem; active: boolean }) {
   const t = useT();
   const live = useContext(LiveStreamContext);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   useGSAPCollapse(bodyRef, open);
-  const shown = live && live.id === item.id
-    ? {
-        reasoning: live.reasoning,
-        streaming: true,
-        reasoningComplete: live.reasoningComplete,
-      }
-    : item;
+  const shown = live && live.id === item.id ? { reasoning: live.reasoning, streaming: true, reasoningComplete: live.reasoningComplete } : item;
   const reasoning = shown.reasoning.trim(); const running = shown.streaming && !shown.reasoningComplete;
   if (!reasoning) return null;
-  const visibleReasoning = displayReasoningText(shown.reasoning, {
+  // Mount the full Markdown only when the segment is expanded and the outer fold is open.
+  const visibleReasoning = active && open ? displayReasoningText(shown.reasoning, {
     streaming: running,
     truncateStreaming: true, stableWindowChars: STREAMING_REASONING_WINDOW_STEP_CHARS, stableWindowLines: STREAMING_REASONING_WINDOW_STEP_LINES,
-  });
+  }) : "";
   return (
     <div className={`turn-collapse__reasoning-phase${open ? " turn-collapse__reasoning-phase--open" : ""}`}>
       <button
@@ -114,7 +110,11 @@ function InlineAssistantReasoning({ item, active }: { item: AssistantItem; activ
         <span>{running ? t("msg.thinkingRunning") : t("msg.thinking")}</span>
         <ChevronRight className={`reasoning__chevron${open ? " reasoning__chevron--open" : ""}`} size={12} />
       </button>
-      <div ref={bodyRef} className="turn-collapse__inline-reasoning">{active && open ? <Markdown text={visibleReasoning} streaming={running} /> : visibleReasoning}</div>
+      {open ? (
+        <div ref={bodyRef} className="turn-collapse__inline-reasoning">
+          {active ? <Markdown text={visibleReasoning} streaming={running} /> : <ReasoningSummary text={shown.reasoning} streaming={running} />}
+        </div>
+      ) : <ReasoningSummary text={shown.reasoning} streaming={running} onOpen={() => setOpen(true)} />}
     </div>
   );
 }

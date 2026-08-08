@@ -29,6 +29,8 @@ type snapshotter struct {
 	start    time.Time
 	stop     chan struct{}
 	done     chan struct{}
+	poll     <-chan time.Time
+	pollAck  chan<- struct{}
 	taken    []checkpoint
 	lastSig  uint64
 }
@@ -36,7 +38,14 @@ type snapshotter struct {
 const snapshotPollInterval = 300 * time.Millisecond
 
 func startSnapshotter(src, dst string, start time.Time) *snapshotter {
-	s := &snapshotter{src: src, dst: dst, start: start, stop: make(chan struct{}), done: make(chan struct{})}
+	return startSnapshotterWithPoll(src, dst, start, nil, nil)
+}
+
+// startSnapshotterWithPoll injects a deterministic poll stream for tests. The
+// production path uses snapshotPollInterval; tests can acknowledge each poll
+// after the snapshotter has finished processing it without sleeping.
+func startSnapshotterWithPoll(src, dst string, start time.Time, poll <-chan time.Time, pollAck chan<- struct{}) *snapshotter {
+	s := &snapshotter{src: src, dst: dst, start: start, stop: make(chan struct{}), done: make(chan struct{}), poll: poll, pollAck: pollAck}
 	s.lastSig = dirSignature(src)
 	go s.run()
 	return s
@@ -44,14 +53,22 @@ func startSnapshotter(src, dst string, start time.Time) *snapshotter {
 
 func (s *snapshotter) run() {
 	defer close(s.done)
-	ticker := time.NewTicker(snapshotPollInterval)
-	defer ticker.Stop()
+	poll := s.poll
+	var ticker *time.Ticker
+	if poll == nil {
+		ticker = time.NewTicker(snapshotPollInterval)
+		poll = ticker.C
+		defer ticker.Stop()
+	}
 	for {
 		select {
 		case <-s.stop:
 			return
-		case <-ticker.C:
+		case <-poll:
 			s.snapshotIfChanged()
+			if s.pollAck != nil {
+				s.pollAck <- struct{}{}
+			}
 		}
 	}
 }

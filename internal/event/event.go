@@ -325,7 +325,7 @@ const (
 
 // ExtensionSurfacePayload carries one extension sidecar's structured UI
 // contribution for the ExtensionSurface / ExtensionStatus kinds. The structs
-// mirror the Extension Protocol v1 UI payload DTOs field-for-field so any
+// mirror the Extension Protocol v2 UI payload DTOs field-for-field so any
 // frontend can render them with native widgets; the protocol stays
 // structured-only (no HTML/CSS/JS/URLs). All user-visible strings are already
 // credential-redacted by the host UI hub before the event is emitted. Exactly
@@ -615,6 +615,24 @@ func RecordContractShadow(s Sink, a ContractShadowAudit) {
 	}
 	if cs, ok := s.(ContractShadowAuditSink); ok {
 		cs.RecordContractShadow(a)
+	}
+}
+
+// OutcomeProgressSink is an optional sink capability for the shadow outcome
+// scorer's per-round samples: counts only, never paths or commands. Shadow
+// means observed, not enforced — the novelty guard still decides behavior.
+type OutcomeProgressSink interface {
+	RecordOutcomeProgress(evidence.OutcomeSample)
+}
+
+// RecordOutcomeProgress forwards a shadow outcome sample only to sinks that
+// explicitly opt in. Ordinary UI sinks receive nothing.
+func RecordOutcomeProgress(s Sink, sample evidence.OutcomeSample) {
+	if nilutil.IsNil(s) {
+		return
+	}
+	if op, ok := s.(OutcomeProgressSink); ok {
+		op.RecordOutcomeProgress(sample)
 	}
 }
 

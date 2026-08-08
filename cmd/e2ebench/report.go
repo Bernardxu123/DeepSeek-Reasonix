@@ -193,6 +193,7 @@ func renderBody(results []result) string {
 	b.WriteString(renderSolveProfiles(results))
 	b.WriteString(renderToolSurface(results))
 	b.WriteString(renderContractShadow(results))
+	b.WriteString(renderOutcomeProgress(results))
 	b.WriteString(renderMechanismLedger(results))
 	if s.unaccounted > 0 {
 		fmt.Fprintf(&b, "> **Accounting incomplete for %d of %d instances** (%d of them solved): the agent was killed before it wrote any metrics, so their cost and tokens are unknown. Totals above cover the %d accounted instances only, and per-solved figures divide by the %d accounted solves — the true totals are higher.\n\n",

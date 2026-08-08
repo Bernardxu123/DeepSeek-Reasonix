@@ -14,6 +14,7 @@ import { ImageViewer } from "./ImageViewer";
 import { Tooltip } from "./Tooltip";
 import { useGSAPCollapse } from "../lib/useGSAPCollapse";
 import { displayReasoningText, STREAMING_REASONING_WINDOW_STEP_CHARS, STREAMING_REASONING_WINDOW_STEP_LINES } from "../lib/reasoningDisplay";
+import { ReasoningSummary } from "./ReasoningSummary";
 import { stripMemoryCompilerExecution } from "../lib/memoryCompilerDisplay";
 import { visibleTranscriptMemoryCitations } from "../lib/memoryCitationVisibility";
 import { invocationSegmentsFromMessage, type InvocationMetadataMap } from "../lib/invocationDisplay";
@@ -935,9 +936,8 @@ function ReasoningPanel({
         {meta && <span className="reasoning__meta">{meta}</span>}
         <ChevronRight className={`reasoning__chevron${reasoningOpen ? " reasoning__chevron--open" : ""}`} size={12} />
       </button>
-      {reasoningOpen && (
-        <div ref={reasoningBodyRef} className="reasoning__body"><Markdown text={visibleReasoning} streaming={isReasoningRunning} /></div>
-      )}
+      {reasoningOpen ? <div ref={reasoningBodyRef} className="reasoning__body"><Markdown text={visibleReasoning} streaming={isReasoningRunning} /></div>
+        : <ReasoningSummary text={item.reasoning} streaming={isReasoningRunning} onOpen={toggleReasoning} />}
     </div>
   );
 }
@@ -945,7 +945,7 @@ function ReasoningPanel({
 export const AssistantMessage = memo(function AssistantMessage({
   item,
   defaultExpanded = false,
-  expandWhileStreaming = true,
+  expandWhileStreaming = false,
   truncateStreamingReasoning = false,
   creationMode = false,
 }: {

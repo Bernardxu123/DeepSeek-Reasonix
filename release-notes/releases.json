@@ -2,6 +2,265 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "1.21.3",
+      "date": "2026-08-08",
+      "channel": "stable",
+      "title": {
+        "en": "Reasonix v1.21.3",
+        "zh": "Reasonix v1.21.3"
+      },
+      "summary": {
+        "en": "This release brings Markdown rendering to thinking traces, explicit Kimi K3 reasoning for custom gateways, visible storage paths, adaptive no-progress guard, and fixes for Windows install behavior, taskbar grouping, retry-inflated compaction, and stream coalescing.",
+        "zh": "此版本为思考过程带来 Markdown 渲染，为自定义网关提供显式 Kimi K3 推理支持，新增存储路径展示与自适应无进展防护，并修复 Windows 安装位置、任务栏分组、重试导致的提前压缩以及流合并问题。"
+      },
+      "surfaces": [
+        "desktop"
+      ],
+      "guides": [
+        {
+          "title": {
+            "en": "Custom Kimi K3 Gateway Setup",
+            "zh": "自定义 Kimi K3 网关设置"
+          },
+          "body": {
+            "en": "Learn how to configure a custom OpenAI-compatible gateway to use the Kimi K3 reasoning protocol.",
+            "zh": "了解如何配置自定义 OpenAI 兼容网关以使用 Kimi K3 推理协议。"
+          },
+          "href": "https://github.com/esengine/DeepSeek-Reasonix/blob/e2ef3f43a50ed5a645df9fa6a7e558f157431eb9/docs/REASONING_PROVIDERS.md"
+        },
+        {
+          "title": {
+            "en": "Custom Kimi K3 Gateway Setup (Chinese)",
+            "zh": "自定义 Kimi K3 网关设置（中文）"
+          },
+          "body": {
+            "en": "Learn how to configure a custom OpenAI-compatible gateway to use the Kimi K3 reasoning protocol.",
+            "zh": "了解如何配置自定义 OpenAI 兼容网关以使用 Kimi K3 推理协议。"
+          },
+          "href": "https://github.com/esengine/DeepSeek-Reasonix/blob/e2ef3f43a50ed5a645df9fa6a7e558f157431eb9/docs/REASONING_PROVIDERS.zh-CN.md"
+        }
+      ],
+      "highlights": [
+        {
+          "kind": "improved",
+          "title": {
+            "en": "Thinking traces now render as Markdown",
+            "zh": "思考过程现在以 Markdown 渲染"
+          },
+          "body": {
+            "en": "Reasoning panels, folded turns, and sub-agent previews now correctly display headings, emphasis, lists, and code blocks. Streaming stops immediately after reasoning completes, and hidden content stays lightweight.",
+            "zh": "推理面板、折叠轮次和子代理预览现在可以正确显示标题、强调、列表和代码块。推理完成后立即停止流式传输，隐藏内容保持轻量。"
+          },
+          "refs": [
+            7940
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": {
+            "en": "Storage paths are visible and Windows keeps its install location",
+            "zh": "存储路径可见，Windows 保留安装位置"
+          },
+          "body": {
+            "en": "Settings now shows the runtime-owned workspace, session and memory, cache, and extension paths as read-only values. Windows installs and updates continue using the user's existing install directory.",
+            "zh": "设置中现在会以只读方式显示运行时实际使用的工作区、会话与记忆、缓存和扩展路径。Windows 安装与更新会继续使用用户现有的安装目录。"
+          },
+          "refs": [
+            7942
+          ]
+        },
+        {
+          "kind": "new",
+          "title": {
+            "en": "Explicit Kimi K3 reasoning for custom gateways",
+            "zh": "自定义网关的显式 Kimi K3 推理"
+          },
+          "body": {
+            "en": "Custom OpenAI-compatible gateways can now select the Kimi K3 reasoning protocol directly in the provider editor. Reasoning history is preserved, and the curated OpenCode Go relay remains unchanged.",
+            "zh": "自定义 OpenAI 兼容网关现在可以在提供商编辑器中直接选择 Kimi K3 推理协议。推理历史得以保留，精选的 OpenCode Go 中继保持不变。"
+          },
+          "refs": [
+            7903
+          ]
+        },
+        {
+          "kind": "fixed",
+          "title": {
+            "en": "Fix Windows taskbar icon grouping",
+            "zh": "修复 Windows 任务栏图标分组"
+          },
+          "body": {
+            "en": "Launching from a pinned shortcut now reuses the pinned icon instead of creating a second one. Existing shortcuts are repaired automatically, and the 0.53 build keeps its separate identity.",
+            "zh": "从固定快捷方式启动现在会重用固定图标，而不是创建第二个图标。现有快捷方式会自动修复，0.53 版本保持独立身份。"
+          },
+          "refs": [
+            7925
+          ]
+        },
+        {
+          "kind": "fixed",
+          "title": {
+            "en": "Fix retry-inflated compaction decisions",
+            "zh": "修复重试导致的提前压缩决策"
+          },
+          "body": {
+            "en": "Automatic compaction now uses the latest single-request prompt size, preventing premature context folding when stream interruptions cause multiple attempts. Billing totals remain accurate.",
+            "zh": "自动压缩现在使用最新的单次请求提示大小，防止流中断导致多次尝试时过早折叠上下文。计费总额保持准确。"
+          },
+          "refs": [
+            7930
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": {
+            "en": "Adaptive no-progress guard replaces fixed round count",
+            "zh": "自适应无进展防护取代固定轮次计数"
+          },
+          "body": {
+            "en": "The agent now escalates only when consecutive rounds add no new evidence; any progress resets the streak. This prevents unnecessary nudges and forced stops while progress is being made.",
+            "zh": "代理现在仅在连续轮次未添加新证据时升级，任何进展都会重置。这可以防止在取得进展时进行不必要的提示和强制停止。"
+          },
+          "refs": [
+            7915
+          ]
+        },
+        {
+          "kind": "fixed",
+          "title": {
+            "en": "Stream coalescing now active on the hot path",
+            "zh": "流合并现在在热路径上生效"
+          },
+          "body": {
+            "en": "Fixed a wiring issue so that the agent's token bursts are properly merged before reaching the frontend, reducing UI jitter and event volume.",
+            "zh": "修复了接线问题，确保代理的令牌突发在到达前端之前正确合并，减少 UI 抖动和事件量。"
+          },
+          "refs": [
+            7905
+          ]
+        }
+      ],
+      "changes": {
+        "new": [
+          {
+            "title": {
+              "en": "Explicit Kimi K3 reasoning for custom gateways",
+              "zh": "自定义网关的显式 Kimi K3 推理"
+            },
+            "body": {
+              "en": "Custom OpenAI-compatible gateways can now select the Kimi K3 reasoning protocol directly in the provider editor. Reasoning history is preserved, and the curated OpenCode Go relay remains unchanged.",
+              "zh": "自定义 OpenAI 兼容网关现在可以在提供商编辑器中直接选择 Kimi K3 推理协议。推理历史得以保留，精选的 OpenCode Go 中继保持不变。"
+            },
+            "refs": [
+              7903
+            ]
+          }
+        ],
+        "improved": [
+          {
+            "title": {
+              "en": "Thinking traces now render as Markdown",
+              "zh": "思考过程现在以 Markdown 渲染"
+            },
+            "body": {
+              "en": "Reasoning panels, folded turns, and sub-agent previews now correctly display headings, emphasis, lists, and code blocks. Streaming stops immediately after reasoning completes, and hidden content stays lightweight.",
+              "zh": "推理面板、折叠轮次和子代理预览现在可以正确显示标题、强调、列表和代码块。推理完成后立即停止流式传输，隐藏内容保持轻量。"
+            },
+            "refs": [
+              7940
+            ]
+          },
+          {
+            "title": {
+              "en": "Storage paths are visible and Windows keeps its install location",
+              "zh": "存储路径可见，Windows 保留安装位置"
+            },
+            "body": {
+              "en": "Settings now shows the runtime-owned workspace, session and memory, cache, and extension paths as read-only values. Windows installs and updates continue using the user's existing install directory.",
+              "zh": "设置中现在会以只读方式显示运行时实际使用的工作区、会话与记忆、缓存和扩展路径。Windows 安装与更新会继续使用用户现有的安装目录。"
+            },
+            "refs": [
+              7942
+            ]
+          },
+          {
+            "title": {
+              "en": "Adaptive no-progress guard replaces fixed round count",
+              "zh": "自适应无进展防护取代固定轮次计数"
+            },
+            "body": {
+              "en": "The agent now escalates only when consecutive rounds add no new evidence; any progress resets the streak. This prevents unnecessary nudges and forced stops while progress is being made.",
+              "zh": "代理现在仅在连续轮次未添加新证据时升级，任何进展都会重置。这可以防止在取得进展时进行不必要的提示和强制停止。"
+            },
+            "refs": [
+              7915
+            ]
+          }
+        ],
+        "fixed": [
+          {
+            "title": {
+              "en": "Fix Windows taskbar icon grouping",
+              "zh": "修复 Windows 任务栏图标分组"
+            },
+            "body": {
+              "en": "Launching from a pinned shortcut now reuses the pinned icon instead of creating a second one. Existing shortcuts are repaired automatically, and the 0.53 build keeps its separate identity.",
+              "zh": "从固定快捷方式启动现在会重用固定图标，而不是创建第二个图标。现有快捷方式会自动修复，0.53 版本保持独立身份。"
+            },
+            "refs": [
+              7925
+            ]
+          },
+          {
+            "title": {
+              "en": "Fix retry-inflated compaction decisions",
+              "zh": "修复重试导致的提前压缩决策"
+            },
+            "body": {
+              "en": "Automatic compaction now uses the latest single-request prompt size, preventing premature context folding when stream interruptions cause multiple attempts. Billing totals remain accurate.",
+              "zh": "自动压缩现在使用最新的单次请求提示大小，防止流中断导致多次尝试时过早折叠上下文。计费总额保持准确。"
+            },
+            "refs": [
+              7930
+            ]
+          },
+          {
+            "title": {
+              "en": "Stream coalescing now active on the hot path",
+              "zh": "流合并现在在热路径上生效"
+            },
+            "body": {
+              "en": "Fixed a wiring issue so that the agent's token bursts are properly merged before reaching the frontend, reducing UI jitter and event volume.",
+              "zh": "修复了接线问题，确保代理的令牌突发在到达前端之前正确合并，减少 UI 抖动和事件量。"
+            },
+            "refs": [
+              7905
+            ]
+          }
+        ]
+      },
+      "upgrade": [],
+      "risks": [],
+      "contributors": [
+        "SivanCola",
+        "esengine"
+      ],
+      "links": {
+        "github": "https://github.com/esengine/DeepSeek-Reasonix/releases/tag/desktop-v1.21.3",
+        "compare": "https://github.com/esengine/DeepSeek-Reasonix/compare/desktop-v1.21.2...desktop-v1.21.3",
+        "download": "https://reasonix.io/?download=desktop&channel=stable#start"
+      },
+      "releaseId": "1.21.3",
+      "baseVersion": "1.21.3",
+      "status": "reviewed",
+      "previousRelease": "1.21.2",
+      "builds": {
+        "cli": "v1.21.3",
+        "desktop": "v1.21.3",
+        "npm": "1.21.3"
+      }
+    },
+    {
       "version": "1.21.2",
       "date": "2026-08-07",
       "channel": "stable",

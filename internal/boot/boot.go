@@ -191,12 +191,12 @@ type Options struct {
 	SandboxNetworkOverride *bool
 	SandboxBashOverride    string
 	WorkspaceOnly          bool
-	// SessionTemp is the logical-session private temporary directory manager.
-	// Rebuild passes the previous Controller's Manager so hot rebuilds keep
-	// temporary files. Empty creates a fresh Manager inside control.New.
-	// Frontends that build a replacement Controller without Rebuild must pass
-	// the same Manager for the same logical session.
+	// SessionTemp is the session-private temp manager; Rebuild reuses old's.
 	SessionTemp *sessiontemp.Manager
+	RuntimeReload
+	// deferPublish keeps a replacement generation private until migration and
+	// commit succeed. Cold BuildRuntime leaves this false and publishes at boot.
+	deferPublish bool
 }
 
 func recoveryHeadlessMode(opts Options) bool {
@@ -209,6 +209,7 @@ func recoveryHeadlessMode(opts Options) bool {
 // assembled. The returned controller owns plugin subprocesses; call Close
 // (via Controller.Close) to release them.
 func build(ctx context.Context, opts Options) (*BuildResult, error) {
+	ctx, opts, owner, fileWriteReceipt := bindRuntimeOwner(ctx, opts)
 	stderr := opts.Stderr
 	if stderr == nil {
 		stderr = os.Stderr
@@ -263,7 +264,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// executor's per-chunk Text/Reasoning stream uncoalesced.
 	sink = control.NewGoalUsageTee(event.Coalesce(sink, event.DefaultStreamDeltaWindow))
 
-	// Extension preflight (stages 5b/7): start the installed, enabled v1 runtime
+	// Extension preflight (stages 5b/7): start the installed, enabled v2 runtime
 	// packages ONCE, here, before model resolution, so plugin-namespaced refs
 	// (plugin/<plugin>/<provider>/<model>) resolve on the very first boot and the
 	// same sidecar generation feeds the executor, planner, guardian, sub-agents,
@@ -299,6 +300,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	extUIHub := uihub.New(uihub.Options{
 		SessionID:  sessionID,
 		Generation: generation,
+		Owner:      owner,
 		Emit: func(ev event.Event) {
 			if c := ctrlRef.Load(); c != nil {
 				c.EmitExtensionEvent(ev)
@@ -320,7 +322,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		session:   protocol.SessionContext{SessionID: sessionID, WorkspaceRoot: root, Generation: generation},
 		ui:        extUIHub,
 		onWarning: extWarn,
-	})
+	}, opts.Extensions, planForPreflight(opts, generation))
 	if err != nil {
 		return nil, fmt.Errorf("boot: %w", err)
 	}
@@ -362,10 +364,11 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			if claimsErr != nil {
 				return nil, fmt.Errorf("boot: %w", claimsErr)
 			}
-			merged, mergeErr := mergeSidecarProviders(baseResolver, extensionMgr, claims)
+			merged, mergeErr := mergeSidecarProviders(baseResolver, extensionMgr, claims, owner)
 			if mergeErr != nil {
 				return nil, fmt.Errorf("boot: %w", mergeErr)
 			}
+			installSidecarStreamRouters(extensionMgr, merged)
 			effectiveResolver = merged
 			extensionResolver = merged
 		}
@@ -589,29 +592,33 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	projectChecks := instruction.ExtractHostChecks(mem.Docs)
 	sysPrompt = memory.Compose(sysPrompt, mem)
 
-	// Skills: discover playbooks (built-in + project/custom/global) and fold their
-	// one-liner index into the same cache-stable prefix — names + descriptions
-	// only; bodies load on demand via run_skill or "/<name>". Bodies never enter
-	// the prefix, so the index costs a fixed, small amount per turn.
-	skillStore := skill.New(skill.Options{
-		ProjectRoot:      root,
-		CustomPaths:      cfg.SkillCustomPaths(),
-		PluginPaths:      cfg.PluginPackageSkillOwners(),
-		PluginAgentPaths: cfg.PluginPackageAgentOwners(),
-		ExcludedPaths:    cfg.SkillExcludedPaths(),
-		DisabledNames:    cfg.DisabledSkillNames(),
-		MaxDepth:         cfg.SkillMaxDepth(),
-		Stderr:           opts.Stderr,
-	})
-	// Install the static profile filter before building the prompt index and
-	// dedicated skill tools. The dependency checker is attached once the live
-	// registry/plugin host has been assembled below.
-	skillStore.ConfigureInvocationPolicy(string(runtimeProfile), nil)
-	skills := skillStore.List()
-	allSkillStore := skill.New(skill.Options{ProjectRoot: root, CustomPaths: cfg.SkillCustomPaths(), PluginPaths: cfg.PluginPackageSkillOwners(), PluginAgentPaths: cfg.PluginPackageAgentOwners(), ExcludedPaths: cfg.SkillExcludedPaths(), MaxDepth: cfg.SkillMaxDepth(), Stderr: io.Discard})
-	allSkills := allSkillStore.List()
-	if !tokenEconomy {
-		sysPrompt = skill.ApplyIndex(sysPrompt, skills)
+	// Skills: rediscovery skipped on no-op/interceptor/UI rebuilds when
+	// ReuseAssembly is retained from the previous BuildResult.
+	var skillStore *skill.Store
+	var skills []skill.Skill
+	var allSkillStore *skill.Store
+	var allSkills []skill.Skill
+	if opts.ReuseAssembly != nil && shouldReuseDiscovery(opts.PreviousPlan) {
+		skills = opts.ReuseAssembly.Skills
+		allSkills = skills
+		skillStore = skill.New(skill.Options{ProjectRoot: root, Stderr: io.Discard})
+		allSkillStore = skillStore
+		if s := strings.TrimSpace(opts.ReuseAssembly.SystemPrompt); s != "" {
+			sysPrompt = s
+		}
+	} else {
+		skillStore = skill.New(skill.Options{
+			ProjectRoot: root, CustomPaths: cfg.SkillCustomPaths(), PluginPaths: cfg.PluginPackageSkillOwners(),
+			PluginAgentPaths: cfg.PluginPackageAgentOwners(), ExcludedPaths: cfg.SkillExcludedPaths(),
+			DisabledNames: cfg.DisabledSkillNames(), MaxDepth: cfg.SkillMaxDepth(), Stderr: opts.Stderr,
+		})
+		skillStore.ConfigureInvocationPolicy(string(runtimeProfile), nil)
+		skills = skillStore.List()
+		allSkillStore = skill.New(skill.Options{ProjectRoot: root, CustomPaths: cfg.SkillCustomPaths(), PluginPaths: cfg.PluginPackageSkillOwners(), PluginAgentPaths: cfg.PluginPackageAgentOwners(), ExcludedPaths: cfg.SkillExcludedPaths(), MaxDepth: cfg.SkillMaxDepth(), Stderr: io.Discard})
+		allSkills = allSkillStore.List()
+		if !tokenEconomy {
+			sysPrompt = skill.ApplyIndex(sysPrompt, skills)
+		}
 	}
 
 	reg := tool.NewRegistry()
@@ -669,7 +676,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// startup built-ins. Do not pass that filtered empty slice to addBuiltins,
 	// where an empty list intentionally means "all built-ins".
 	if !tokenEconomy || len(cfg.Tools.Enabled) == 0 || len(enabledBuiltins) > 0 {
-		addBuiltins(reg, enabledBuiltins, writeRoots, bashSpec, bashTimeout, searchSpec, stderr, root, proxySpec, forbidReadRoots, readPathResolver, sessionGuard, managedConfig, opts.FileOverlay, opts.TerminalRunner, sessionTemp)
+		addBuiltins(reg, enabledBuiltins, writeRoots, bashSpec, bashTimeout, searchSpec, stderr, root, proxySpec, forbidReadRoots, readPathResolver, sessionGuard, managedConfig, opts.FileOverlay, opts.TerminalRunner, sessionTemp, fileWriteReceipt)
 	}
 	// Use the caller-supplied shared host when set, so controllers for the same
 	// workspace root reuse running MCP processes (e.g. one CodeGraph daemon
@@ -919,11 +926,12 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		WithSessionAllow(opts.PermissionAllow)
 	headlessGate := control.NewSharedHeadlessGate(policy, opts.HeadlessApprovalMode)
 
-	// Hooks: load the global settings.json plus the project's. Non-blocking hook
-	// output is surfaced to the user as a Notice through the shared sink. The
-	// runner fires PreToolUse/PostToolUse in the agent loop and
-	// PermissionRequest/UserPromptSubmit/Stop at the controller boundary.
-	resolvedHooks := hook.Load(hook.LoadOptions{ProjectRoot: root})
+	var resolvedHooks []hook.ResolvedHook
+	if opts.ReuseAssembly != nil && shouldReuseDiscovery(opts.PreviousPlan) {
+		resolvedHooks = opts.ReuseAssembly.Hooks
+	} else {
+		resolvedHooks = hook.Load(hook.LoadOptions{ProjectRoot: root})
+	}
 	hookRuntime := hook.RuntimeOptions{}
 	if shell.Kind == sandbox.ShellBash {
 		hookRuntime.BashPath = shell.Path
@@ -1390,9 +1398,12 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		}
 		return &event.Profile{Model: model, Effort: effort}
 	}
-	// Custom slash commands (.reasonix/commands + user dir). Best-effort: a malformed
-	// file is skipped, and a load error never blocks the session.
-	cmds, _ := command.LoadRoots(config.CommandRootsForRoot(root)...)
+	var cmds []command.Command
+	if opts.ReuseAssembly != nil && shouldReuseDiscovery(opts.PreviousPlan) {
+		cmds = opts.ReuseAssembly.Commands
+	} else {
+		cmds, _ = command.LoadRoots(config.CommandRootsForRoot(root)...)
+	}
 	slashCommandAdded := false
 	slashCommandIncludesSkills := false
 	addSlashCommandTool := func(includeSkills bool) string {
@@ -1536,19 +1547,20 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 				return source + " tools are already enabled or disabled by [tools].enabled."
 			}
 			installed := addTools(reg, builtin.Workspace{
-				Dir:             root,
-				WriteRoots:      writeRoots,
-				ForbidReadRoots: forbidReadRoots,
-				Bash:            bashSpec,
-				BashTimeout:     bashTimeout,
-				Search:          searchSpec,
-				ProxySpec:       proxySpec,
-				ReadPaths:       readPathResolver,
-				SessionGuard:    sessionGuard,
-				ManagedConfig:   managedConfig,
-				FileOverlay:     opts.FileOverlay,
-				Terminal:        opts.TerminalRunner,
-				SessionTemp:     sessionTemp,
+				Dir:              root,
+				WriteRoots:       writeRoots,
+				ForbidReadRoots:  forbidReadRoots,
+				Bash:             bashSpec,
+				BashTimeout:      bashTimeout,
+				Search:           searchSpec,
+				ProxySpec:        proxySpec,
+				ReadPaths:        readPathResolver,
+				SessionGuard:     sessionGuard,
+				ManagedConfig:    managedConfig,
+				FileOverlay:      opts.FileOverlay,
+				Terminal:         opts.TerminalRunner,
+				SessionTemp:      sessionTemp,
+				FileWriteReceipt: fileWriteReceipt,
 			}.Tools(missing...))
 			return "enabled " + strings.Join(installed, ", ") + "."
 		}
@@ -1919,7 +1931,9 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		OnSessionRecovered:  opts.OnSessionRecovered,
 		// The merged catalog (nil without provider-declaring sidecars) lets
 		// frontends enumerate plugin/... models through ProviderCatalog.
-		ProviderResolver: extensionResolver,
+		ProviderResolver:  extensionResolver,
+		RuntimeGeneration: generation,
+		RuntimeOwner:      owner,
 		// Share the Manager already bound into bash/grep so tools and the
 		// Controller observe the same temporary generation across rebuilds.
 		SessionTemp: sessionTemp,
@@ -2068,9 +2082,11 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		mcpSpecs:     mcpSpecs,
 		providers:    baseResolver.Catalog(),
 	}, generation, extensionBoot{
-		session:   protocol.SessionContext{SessionID: sessionID, WorkspaceRoot: root, Generation: generation},
-		ui:        extUIHub,
-		onWarning: extWarn,
+		session:            protocol.SessionContext{SessionID: sessionID, WorkspaceRoot: root, Generation: generation},
+		ui:                 extUIHub,
+		onWarning:          extWarn,
+		skipPromptStrategy: shouldSkipPromptStrategy(opts.PreviousPlan),
+		previousDispatcher: opts.PreviousDispatcher,
 	}, extensionMgr)
 	// Ownership of the preflighted Manager transferred to assembly on every
 	// path: it was either closed inside or registered into the RuntimeSet.
@@ -2108,25 +2124,15 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	if extensionResolver != nil {
 		providerResolver = extensionResolver
 	}
-	// The runtime set (extension sidecar Manager, when any) is owned by the
-	// controller: chain its close into the controller cleanup the way LSP
-	// cleanup is chained, so sidecars live exactly as long as their
-	// controller. RuntimeSet.Close is idempotent, so double-close paths
-	// (Rebuild's fail-atomic cleanup) stay safe.
-	prevCleanup := cleanup
-	cleanup = func() { prevCleanup(); _ = runtimeSet.Close() }
-	// The dispatcher only exists once sidecars started and the snapshot froze,
-	// both of which happen after control.New — hand it to the already-built
-	// controller before the build returns. Nil (no sidecars, or a degraded
-	// snapshot) leaves the controller byte-identical to the pre-dispatch path.
+	cleanup = wireRuntimeScopeCleanup(runtimeSet, cleanup, opts.SharedHost, pluginHost, lspMgr, opts.SessionTemp)
 	ctrl.SetExtensions(extensionDispatcher)
-	// Stage 8a: the UI hub only earns its place on the controller when
-	// sidecars actually started — with none, the hub is dropped here and the
-	// session behaves exactly as if it never existed.
 	if extensionMgr == nil {
 		extUIHub = nil
 	} else {
 		ctrl.SetExtensionUI(extUIHub)
+	}
+	if providerResolver != nil {
+		ctrl.SetProviderResolver(providerResolver)
 	}
 	// Stage 6b2 system-prompt handoff: the 6b1 strategy pass may have replaced
 	// the prompt while the snapshot was freezing, but the executor session was
@@ -2138,7 +2144,8 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			ctrl.ApplyExtensionSystemPrompt(final)
 		}
 	}
-	return &BuildResult{Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Extensions: extensionMgr, Dispatcher: extensionDispatcher, ExtensionUI: extUIHub, ProviderResolver: providerResolver}, nil
+	assembly := &ReusedAssembly{SystemPrompt: sysPrompt, Skills: skills, Commands: cmds, Hooks: resolvedHooks, Registry: reg}
+	return finalizeBuildResult(&BuildResult{Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: owner, Extensions: extensionMgr, Dispatcher: extensionDispatcher, ExtensionUI: extUIHub, ProviderResolver: providerResolver, BaseProviderResolver: baseResolver, Assembly: assembly}, !opts.deferPublish), nil
 }
 
 // effectivePlannerModel centralizes planner precedence. The explicit ACP hard
@@ -2622,12 +2629,12 @@ func NewProviderWithProxy(e *config.ProviderEntry, proxy netclient.ProxySpec) (p
 // and makes bash warn when a command references them. managedConfig names the
 // Reasonix-owned config files writable outside writeRoots after a fresh
 // per-write human approval.
-func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sandbox.Spec, bashTimeout time.Duration, searchSpec builtin.SearchSpec, stderr io.Writer, workDir string, proxySpec netclient.ProxySpec, forbidReadRoots []string, readPathResolver *builtin.PathResolver, sessionGuard builtin.SessionDataGuard, managedConfig builtin.ManagedConfigPaths, overlay builtin.FileOverlay, terminal builtin.TerminalRunner, sessionTemp *sessiontemp.Manager) {
+func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sandbox.Spec, bashTimeout time.Duration, searchSpec builtin.SearchSpec, stderr io.Writer, workDir string, proxySpec netclient.ProxySpec, forbidReadRoots []string, readPathResolver *builtin.PathResolver, sessionGuard builtin.SessionDataGuard, managedConfig builtin.ManagedConfigPaths, overlay builtin.FileOverlay, terminal builtin.TerminalRunner, sessionTemp *sessiontemp.Manager, fileWriteReceipt func(path string, hadPrior bool, prior []byte)) {
 	// If a workspace directory is set, use workspace-bound tools that resolve
 	// paths relative to that directory. Otherwise fall back to the process-cwd
 	// compile-time builtins.
 	if workDir != "" {
-		ws := builtin.Workspace{Dir: workDir, WriteRoots: writeRoots, ForbidReadRoots: forbidReadRoots, Bash: bashSpec, BashTimeout: bashTimeout, Search: searchSpec, ProxySpec: proxySpec, ReadPaths: readPathResolver, SessionGuard: sessionGuard, ManagedConfig: managedConfig, FileOverlay: overlay, Terminal: terminal, SessionTemp: sessionTemp}
+		ws := builtin.Workspace{Dir: workDir, WriteRoots: writeRoots, ForbidReadRoots: forbidReadRoots, Bash: bashSpec, BashTimeout: bashTimeout, Search: searchSpec, ProxySpec: proxySpec, ReadPaths: readPathResolver, SessionGuard: sessionGuard, ManagedConfig: managedConfig, FileOverlay: overlay, Terminal: terminal, SessionTemp: sessionTemp, FileWriteReceipt: fileWriteReceipt}
 		for _, t := range ws.Tools(enabled...) {
 			reg.Add(t)
 		}
@@ -2659,7 +2666,11 @@ func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sand
 	if rebound, ok := builtin.BindSessionTemp(searchTool, sessionTemp); ok {
 		searchTool = rebound
 	}
-	confined := append(builtin.ConfineWriters(writeRoots, sessionGuard, managedConfig),
+	writers := builtin.ConfineWriters(writeRoots, sessionGuard, managedConfig)
+	for i, writer := range writers {
+		writers[i] = builtin.BindFileWriteReceipt(writer, fileWriteReceipt)
+	}
+	confined := append(writers,
 		bashTool,
 		searchTool,
 		builtin.ConfineWebFetch(proxySpec))

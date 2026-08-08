@@ -43,6 +43,7 @@ import type {
   BotSettingsView,
   CapabilitiesView,
   CapabilityDiagnosticsReport,
+  RuntimeDoctorReport,
   CheckpointMeta,
   CommandInfo,
   ControlResult,
@@ -320,6 +321,7 @@ export interface AppBindings {
   MCPMarketplaceResolve(registryName: string): Promise<MCPMarketplaceEntry>;
   SkillsSettings(): Promise<SkillsSettingsView>;
   CapabilityDiagnostics(includeSessionRuntime: boolean): Promise<CapabilityDiagnosticsReport>;
+  RuntimeDoctor(): Promise<RuntimeDoctorReport>;
   Plugins(): Promise<PluginView[]>;
   PlanPluginInstall(source: string, options: PluginInstallOptions): Promise<string>;
   InstallPlugin(source: string, options: PluginInstallOptions): Promise<string>;
@@ -519,6 +521,7 @@ export interface AppBindings {
   OpenDownloadPage(): Promise<void>;
   OpenUserConfigPath?(): Promise<void>;
   ReloadUserConfig?(): Promise<{ configWarnings?: string[]; configPath?: string } | null>;
+  StorageSettings(): Promise<{ defaultWorkspace: string; statePath: string; cachePath: string; extensionsPath: string }>;
   NeedsOnboarding(): Promise<boolean>;
   ConnectKey(apiKey: string): Promise<string>;
   // Crash overlay "Send report" (desktop/crash_app.go): scrubs user paths, attaches
@@ -3332,6 +3335,20 @@ function makeMockApp(): AppBindings {
         skillRoots: capSkillRoots.map((s) => ({ ...s })),
       };
     },
+    async RuntimeDoctor() {
+      return {
+        text: "runtime status: mock\nrecoverability: clean=true irreversible=false\nresume: allow=true cleanRollback=true\n",
+        publishedGeneration: 0,
+        allowResume: true,
+        cleanRollback: true,
+        hasIrreversible: false,
+        noOpRebuilds: 0,
+        fullRebuilds: 0,
+        subgraphRebuilds: 0,
+        staleDrops: 0,
+        admissionRejected: 0, runtimeOwnerFallbacks: 0,
+      };
+    },
     async CapabilityDiagnostics(includeSessionRuntime: boolean) {
       const report: CapabilityDiagnosticsReport = {
         schema_version: 1,
@@ -4116,9 +4133,8 @@ function makeMockApp(): AppBindings {
         conversationWidth,
       })) as DesktopStartupSettingsView;
     },
-    async Settings() {
-      return JSON.parse(JSON.stringify(settings)) as SettingsView;
-    },
+    async Settings() { return JSON.parse(JSON.stringify(settings)) as SettingsView; },
+    async StorageSettings() { return { defaultWorkspace: cwd, statePath: `${cwd}/.reasonix`, cachePath: `${cwd}/.reasonix/cache`, extensionsPath: `${cwd}/.reasonix/plugins` }; },
     async HooksSettings(scope: string) {
       const key = scope === "project" ? "project" : "global";
       return JSON.parse(JSON.stringify(hookSettings[key])) as HooksSettingsView;
